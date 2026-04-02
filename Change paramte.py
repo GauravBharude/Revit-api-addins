@@ -26,6 +26,9 @@ for el in collector:
                                       break
 
  if last_digit is not None:
+#in c sharp it is 
+#List<(el,lastdihigt)> felem which states List<tuple(key,pair)>
+#to find it is felme.Add((ek,lastfgit))
                                       filtered_elems.append((el, last_digit))
  else:
  errors.append("No digit in Comments for element ID {}".format(el.Id))
