@@ -1,0 +1,75 @@
+# -*- coding: utf-8 -*-
+
+from Autodesk.Revit.DB import *
+from Autodesk.Revit.UI.Selection import ObjectType
+from pyrevit import revit, forms, script
+
+doc = revit.doc
+uidoc = revit.uidoc
+
+# Select tags
+refs = uidoc.Selection.PickObjects(ObjectType.Element, "Select tags to align")
+
+tags = []
+for r in refs:
+    el = doc.GetElement(r)
+    if isinstance(el, IndependentTag):
+        tags.append(el)
+
+if not tags:
+    forms.alert("No tags selected")
+    script.exit()
+
+# Select reference tag
+ref_pick = uidoc.Selection.PickObject(ObjectType.Element, "Select reference tag")
+ref_tag = doc.GetElement(ref_pick)
+
+ref_x = ref_tag.TagHeadPosition.X
+
+t = Transaction(doc, "Align Tags X")
+t.Start()
+
+for tag in tags:
+
+    pos = tag.TagHeadPosition
+    new_head = XYZ(ref_x, pos.Y, pos.Z)
+
+    # Save leader data safely
+    elbow = None
+    end = None
+    ref = None
+
+    try:
+        refs = tag.GetTaggedReferences()
+        if refs:
+            ref = refs[0]
+
+            if tag.HasLeader:
+                try:
+                    elbow = tag.GetLeaderElbow(ref)
+                except:
+                    pass
+
+                try:
+                    end = tag.GetLeaderEnd(ref)
+                except:
+                    pass
+    except:
+        pass
+
+    # Move tag head
+    tag.TagHeadPosition = new_head
+
+    # Restore leader
+    try:
+        if ref:
+            if elbow:
+                tag.SetLeaderElbow(ref, elbow)
+            if end:
+                tag.SetLeaderEnd(ref, end)
+    except:
+        pass
+
+t.Commit()
+
+print("All possible tags aligned.")
