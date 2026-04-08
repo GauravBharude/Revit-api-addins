@@ -1,0 +1,299 @@
+# -*- coding: utf-8 -*-
+ 
+# ---------------- IMPORTS ---------------- #
+ 
+import clr
+clr.AddReference("RevitAPI")
+clr.AddReference("RevitAPIUI")
+clr.AddReference("System")
+clr.AddReference("System.Windows.Forms")
+clr.AddReference("System.Drawing")
+ 
+import System
+from System.Windows.Forms import (
+    Form, Panel, Label, TextBox, Button, ComboBox, ComboBoxStyle
+)
+from System.Drawing import Point, Size, Color, Font
+from pyrevit import forms as pyforms
+
+
+# ---------------- FIXTURE ORDER ---------------- #
+ 
+FIXTURE_ORDER = [
+    "Water closet - private (flush tank)",
+    "Water closet - public (flushometer valve)",
+    "Hand Spray",
+    "Lavatory - private",
+    "Lavatory - public",
+    "Shower head - private (mixing valve)",
+    "Shower head - public (mixing valve)",
+    "Bathtub - private",
+    "Bathtub - public",
+    "Kitchen sink - private",
+    "Kitchen sink - hotel/restaurant",
+    "Washing machine (8 lb) - private",
+    "Washing machine (15 lb) - public",
+    "Dishwashing machine - private",
+    "Urinal - 1\" flushometer valve",
+    "Bidet",
+    "Service sink (offices, etc.)",
+    "Laundry trays (1-3)",
+    "Drinking fountain"
+]
+ 
+# ---------------- IPC VALUES ---------------- #
+ 
+IPC_VALUES = {
+    "Water closet - private (flush tank)":       (2.2,  0),
+    "Water closet - public (flushometer valve)": (10,   0),
+    "Hand Spray":                                (1,    0),
+    "Lavatory - private":                        (0.7,  0.5),
+    "Lavatory - public":                         (2,    1.5),
+    "Shower head - private (mixing valve)":      (1.4,  1),
+    "Shower head - public (mixing valve)":       (4,    3),
+    "Bathtub - private":                         (1.4,  1),
+    "Bathtub - public":                          (4,    3),
+    "Kitchen sink - private":                    (1.4,  1),
+    "Kitchen sink - hotel/restaurant":           (4,    3),
+    "Washing machine (8 lb) - private":          (1.4,    1),
+    "Washing machine (15 lb) - public":          (4,    3),
+    "Dishwashing machine - private":             (1.4,  1.4),
+    "Urinal - 1\" flushometer valve":            (10,   0),
+    "Bidet":                                     (2,    1.5),
+    "Service sink (offices, etc.)":              (3,    2.25),
+    "Laundry trays (1-3)":                       (1.4,  1),
+    "Drinking fountain":                         (0.25, 0)
+}
+
+# ---------------- FU → LPS : FLUSH TANK ---------------- #
+
+FU_TO_LPS_FLUSH_TANK = {
+0:0,1:0.189,2:0.315,3:0.410,4:0.505,5:0.593,6:0.675,7:0.744,8:0.808,9:0.864,
+10:0.921,11:0.972,12:1.009,13:1.041,14:1.073,15:1.104,16:1.136,17:1.161,18:1.186,
+19:1.211,20:1.237,25:1.356,30:1.470,35:1.571,40:1.659,45:1.748,50:1.836,
+60:2.019,70:2.208,80:2.397,90:2.587,100:2.744,120:3.028,140:3.312,160:3.596,
+180:3.849,200:4.101,225:4.416,250:4.732,275:5.047,300:5.363,400:6.624,
+500:7.823,750:10.725,1000:13.123,1250:15.079,1500:16.971,1750:18.738,
+2000:20.504,2500:23.974,3000:27.318,4000:33.122,5000:37.412
+}
+
+# ---------------- FU → LPS : FLUSH VALVE ---------------- #
+
+FU_TO_LPS_FLUSH_VALVE = {
+0:0,1:0.946,2:0.946,3:0.946,4:0.946,5:0.946,6:1.098,7:1.249,8:1.401,9:1.552,
+10:1.703,11:1.754,12:1.804,13:1.855,14:1.905,15:1.956,16:2.006,17:2.057,18:2.107,
+19:2.158,20:2.208,25:2.397,30:2.650,35:2.776,40:2.902,45:3.028,50:3.155,
+60:3.407,70:3.659,80:3.861,90:4.057,100:4.259,120:4.606,140:4.858,160:5.110,
+180:5.394,200:5.678,225:6.025,250:6.372,275:5.047,300:5.363,400:6.624,
+500:7.823,750:10.725,1000:13.123,1250:15.079,1500:16.971,1750:18.738,
+2000:20.504,2500:23.974,3000:27.318,4000:33.122,5000:37.412
+}
+
+def fu_to_lps(fu, table):
+    keys = sorted(table.keys())
+    if fu <= keys[0]:  return table[keys[0]]
+    if fu >= keys[-1]: return table[keys[-1]]
+    for i in range(len(keys)-1):
+        k1, k2 = keys[i], keys[i+1]
+        if k1 <= fu <= k2:
+            ratio = float(fu-k1)/float(k2-k1)
+            return table[k1] + ratio*(table[k2]-table[k1])
+    return 0
+
+
+# ---------------- PIPE TABLES ---------------- #
+ 
+COLD_PIPE = [
+    (0.0,   0.00009, 0),
+    (0.1,   0.2625, 20),
+    (0.2625,0.4,    25),
+    (0.4,   0.7,    32),
+    (0.7,   1.0,    40),
+    (1.0,   1.714,  50),
+    (1.714, 2.625,  63),
+    (2.625, 3.33,   75),
+    (3.33,  4.7,    90),
+    (4.7,   7.0,   110)
+]
+ 
+HOT_PIPE = [
+    (0.0,   0.00009, 0),
+    (0.1,   0.15,   20),
+    (0.15,  0.26,   25),
+    (0.26,  0.4,    32),
+    (0.4,   0.59,   40),
+    (0.59,  0.95,   50),
+    (0.95,  1.5,    63),
+    (1.5,   2,      75),
+    (2,     2.9,    90),
+    (2.9,   4,     110)
+]
+ 
+def lps_to_pipe(lps, table):
+    for low, high, size in table:
+        if low <= lps < high:
+            return size
+    return table[-1][2]
+
+
+# ---------------- COLUMN LAYOUT ---------------- #
+COL_FIXTURE =  15
+COL_COLD_FU = 300
+COL_HOT_FU  = 365
+COL_QTY     = 430
+COL_W       =  60
+COL_QTY_W   =  60
+
+# ---------------- FORM ---------------- #
+ 
+class PipeCalculatorForm(Form):
+ 
+    def __init__(self):
+        self.Text   = "Water Supply Pipe Size Calculator"
+        self.Width  = 560
+        self.Height = 800
+ 
+        # ------ Dropdown at top ------ #
+        lbl_type          = Label()
+        lbl_type.Text     = "SUPPLY SYSTEM:"
+        lbl_type.Location = Point(15, 15)
+        lbl_type.Width    = 160
+        lbl_type.Height   = 22
+        lbl_type.Font     = Font("Arial", 9, System.Drawing.FontStyle.Bold)
+        self.Controls.Add(lbl_type)
+
+        self.combo               = ComboBox()
+        self.combo.Location      = Point(175, 12)
+        self.combo.Width         = 160
+        self.combo.Height        = 24
+        self.combo.DropDownStyle = ComboBoxStyle.DropDownList
+        self.combo.Items.Add("Flush Tank")
+        self.combo.Items.Add("Flush Valve")
+        self.combo.SelectedIndex = 0
+        self.Controls.Add(self.combo)
+
+        # ------ Scrollable panel below dropdown ------ #
+        panel = Panel()
+        panel.Location   = Point(0, 45)
+        panel.Size       = Size(560, 680)
+        panel.AutoScroll = True
+        self.Controls.Add(panel)
+ 
+        self.inputs = {}
+        bold_font  = Font("Arial", 8, System.Drawing.FontStyle.Bold)
+        gray_color = Color.FromArgb(80, 80, 80)
+
+        # ------ Header row ------ #
+        y = 10
+
+        def make_header(text, x, w):
+            lbl           = Label()
+            lbl.Text      = text
+            lbl.Location  = Point(x, y)
+            lbl.Width     = w
+            lbl.Height    = 20
+            lbl.Font      = bold_font
+            lbl.ForeColor = Color.DarkSlateGray
+            panel.Controls.Add(lbl)
+
+        make_header("Fixture",   COL_FIXTURE, 280)
+        make_header("Cold FU",   COL_COLD_FU, COL_W)
+        make_header("Hot FU",    COL_HOT_FU,  COL_W)
+        make_header("Qty",       COL_QTY,     COL_QTY_W)
+
+        y += 24
+
+        # ------ Fixture rows ------ #
+        for fixture in FIXTURE_ORDER:
+            cold_fu, hot_fu = IPC_VALUES[fixture]
+
+            lbl_fix           = Label()
+            lbl_fix.Text      = fixture
+            lbl_fix.Location  = Point(COL_FIXTURE, y)
+            lbl_fix.Width     = 280
+            lbl_fix.Height    = 22
+            panel.Controls.Add(lbl_fix)
+
+            lbl_cold           = Label()
+            lbl_cold.Text      = str(cold_fu)
+            lbl_cold.Location  = Point(COL_COLD_FU, y)
+            lbl_cold.Width     = COL_W
+            lbl_cold.Height    = 22
+            lbl_cold.ForeColor = gray_color
+            panel.Controls.Add(lbl_cold)
+
+            lbl_hot            = Label()
+            lbl_hot.Text       = str(hot_fu)
+            lbl_hot.Location   = Point(COL_HOT_FU, y)
+            lbl_hot.Width      = COL_W
+            lbl_hot.Height     = 22
+            lbl_hot.ForeColor  = gray_color
+            panel.Controls.Add(lbl_hot)
+
+            txt          = TextBox()
+            txt.Text     = ""
+            txt.Location = Point(COL_QTY, y)
+            txt.Width    = COL_QTY_W
+            panel.Controls.Add(txt)
+
+            self.inputs[fixture] = txt
+            y += 28
+
+        # ------ Calculate button ------ #
+        btn          = Button()
+        btn.Text     = "Calculate"
+        btn.Location = Point(COL_FIXTURE, y + 10)
+        btn.Width    = 120
+        btn.Height   = 30
+        btn.Click   += self.on_calculate
+        panel.Controls.Add(btn)
+
+        # ------ Result label ------ #
+        self.result           = Label()
+        self.result.Location  = Point(COL_FIXTURE, y + 55)
+        self.result.Width     = 500
+        self.result.Height    = 80
+        self.result.Font      = Font("Arial", 10, System.Drawing.FontStyle.Bold)
+        self.result.ForeColor = Color.DarkBlue
+        panel.Controls.Add(self.result)
+ 
+    def on_calculate(self, sender, args):
+        try:
+            selected = self.combo.SelectedItem.ToString()
+            if selected == "Flush Valve":
+                fu_table = FU_TO_LPS_FLUSH_VALVE
+            else:
+                fu_table = FU_TO_LPS_FLUSH_TANK
+
+            cold_fu = 0.0
+            hot_fu  = 0.0
+ 
+            for fixture, box in self.inputs.items():
+                raw = box.Text.strip()
+                qty = float(raw) if raw else 0.0
+                c, h = IPC_VALUES[fixture]
+                cold_fu += float(c) * qty
+                hot_fu  += float(h) * qty
+ 
+            cold_lps  = float(fu_to_lps(cold_fu, fu_table))
+            hot_lps   = float(fu_to_lps(hot_fu,  fu_table))
+            cold_pipe = int(lps_to_pipe(cold_lps, COLD_PIPE))
+            hot_pipe  = int(lps_to_pipe(hot_lps,  HOT_PIPE))
+
+            self.result.Text = (
+                "Cold Water Pipe Size : {0} mm  ({1:.3f} L/s)   FU: {2:.2f}\n"
+                "Hot Water Pipe Size  : {3} mm  ({4:.3f} L/s)   FU: {5:.2f}"
+            ).format(cold_pipe, cold_lps, float(cold_fu),
+                     hot_pipe,  hot_lps,  float(hot_fu))
+ 
+        except Exception as ex:
+            pyforms.alert("Calculation error:\n" + str(ex))
+ 
+ 
+# ---------------- RUN ---------------- #
+ 
+try:
+    form = PipeCalculatorForm()
+    form.ShowDialog()
+except Exception as e:
+    pyforms.alert(str(e))
