@@ -1,0 +1,42 @@
+# -*- coding: utf-8 -*-
+
+from Autodesk.Revit.DB import *
+from pyrevit import revit, forms
+
+doc = revit.doc
+uidoc = revit.uidoc
+
+# Ask user for X movement
+offset_mm = forms.ask_for_string(
+    prompt="Enter X movement in mm (+ right / - left)",
+    default="500"
+)
+
+if not offset_mm:
+    script.exit()
+
+offset = float(offset_mm) / 304.8  # convert mm to feet
+
+selection = uidoc.Selection.GetElementIds()
+
+tags = []
+for id in selection:
+    el = doc.GetElement(id)
+    if isinstance(el, IndependentTag):
+        tags.append(el)
+
+if not tags:
+    forms.alert("Select pipe tags first")
+    script.exit()
+
+t = Transaction(doc, "Move Tags X Axis")
+t.Start()
+
+for tag in tags:
+    pos = tag.TagHeadPosition
+    new_pos = XYZ(pos.X + offset, pos.Y, pos.Z)
+    tag.TagHeadPosition = new_pos
+
+t.Commit()
+
+print("Tags moved in X direction successfully")
