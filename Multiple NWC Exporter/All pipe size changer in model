@@ -1,0 +1,48 @@
+from Autodesk.Revit.DB import *
+from Autodesk.Revit.DB.Plumbing import Pipe
+from pyrevit import revit
+
+doc = revit.doc
+
+MM_TO_FT = 1.0 / 304.8
+
+OLD_SIZE_MM = 162
+NEW_SIZE_MM = 160
+
+old_size_ft = OLD_SIZE_MM * MM_TO_FT
+new_size_ft = NEW_SIZE_MM * MM_TO_FT
+
+t = Transaction(doc, "Convert 160mm Pipes to 162mm")
+t.Start()
+
+pipes = FilteredElementCollector(doc).OfClass(Pipe)
+
+count = 0
+
+for pipe in pipes:
+    try:
+        param = pipe.get_Parameter(BuiltInParameter.RBS_PIPE_DIAMETER_PARAM)
+
+        if param:
+            dia = param.AsDouble()
+
+            if abs(dia - old_size_ft) < 0.001:
+
+                # Get pipe type SAFELY
+                pipe_type = doc.GetElement(pipe.GetTypeId())
+                type_name = pipe_type.get_Parameter(
+                    BuiltInParameter.SYMBOL_NAME_PARAM
+                ).AsString()
+
+                # Filter (edit if needed)
+                if type_name and "PPR" in type_name:
+
+                    param.Set(new_size_ft)
+                    count += 1
+
+    except Exception as e:
+        print("Error:", e)
+
+t.Commit()
+
+print("Updated pipes:", count)
