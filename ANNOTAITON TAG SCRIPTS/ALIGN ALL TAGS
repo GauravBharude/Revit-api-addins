@@ -73,3 +73,123 @@ for tag in tags:
 t.Commit()
 
 print("All possible tags aligned.")
+
+
+
+
+// c sharp code
+        try
+        {
+            // Step 1: Select tags
+//Ilist for traverse 
+            IList<Reference> pickedRefs = uidoc.Selection.PickObjects(
+                ObjectType.Element,
+                "Select tags to align");
+//List Independent tag 
+            List<IndependentTag> tags = new List<IndependentTag>();
+
+            foreach (Reference r in pickedRefs)
+            {
+                Element el = doc.GetElement(r);
+                if (el is IndependentTag tag)
+                {
+                    tags.Add(tag);
+                }
+            }
+
+            if (tags.Count == 0)
+            {
+                TaskDialog.Show("Align Tags", "No tags selected");
+                return Result.Cancelled;
+            }
+
+            // Step 2: Pick reference tag
+            Reference refPick = uidoc.Selection.PickObject(
+                ObjectType.Element,
+                "Select reference tag");
+
+            IndependentTag refTag = doc.GetElement(refPick) as IndependentTag;
+
+            if (refTag == null)
+            {
+                TaskDialog.Show("Align Tags", "Invalid reference tag");
+                return Result.Cancelled;
+            }
+
+            double refX = refTag.TagHeadPosition.X;
+
+            // Step 3: Start transaction
+            using (Transaction t = new Transaction(doc, "Align Tags X"))
+            {
+                t.Start();
+
+                foreach (IndependentTag tag in tags)
+                {
+                    XYZ pos = tag.TagHeadPosition;
+                    XYZ newHead = new XYZ(refX, pos.Y, pos.Z);
+
+                    XYZ elbow = null;
+                    XYZ end = null;
+                    Reference taggedRef = null;
+
+                    try
+                    {
+                        IList<Reference> refs = tag.GetTaggedReferences();
+
+                        if (refs != null && refs.Count > 0)
+                        {
+                            taggedRef = refs[0];
+
+                            if (tag.HasLeader)
+                            {
+                                try
+                                {
+                                    elbow = tag.GetLeaderElbow(taggedRef);
+                                }
+                                catch { }
+
+                                try
+                                {
+                                    end = tag.GetLeaderEnd(taggedRef);
+                                }
+                                catch { }
+                            }
+                        }
+                    }
+                    catch { }
+
+                    // Move tag head
+                    tag.TagHeadPosition = newHead;
+
+                    // Restore leader
+                    try
+                    {
+                        if (taggedRef != null)
+                        {
+                            if (elbow != null)
+                                tag.SetLeaderElbow(taggedRef, elbow);
+
+                            if (end != null)
+                                tag.SetLeaderEnd(taggedRef, end);
+                        }
+                    }
+                    catch { }
+                }
+
+                t.Commit();
+            }
+
+            TaskDialog.Show("Align Tags", "All possible tags aligned.");
+            return Result.Succeeded;
+        }
+        catch (Autodesk.Revit.Exceptions.OperationCanceledException)
+        {
+            return Result.Cancelled;
+        }
+        catch (Exception ex)
+        {
+            message = ex.Message;
+            return Result.Failed;
+        }
+    }
+}
