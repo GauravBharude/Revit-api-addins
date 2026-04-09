@@ -1,0 +1,106 @@
+using System;
+using System.Linq;
+using Autodesk.Revit.UI;
+using Autodesk.Revit.DB;
+using Autodesk.Revit.UI.Selection;
+using Autodesk.Revit.Attributes;
+
+[Transaction(TransactionMode.Manual)]
+public class PlaceSprinklerAtRoomCenter : IExternalCommand
+{
+    public Result Execute(ExternalCommandData commandData, ref string message, ElementSet elements)
+    {
+        UIDocument uidoc = commandData.Application.ActiveUIDocument;
+        Document doc = uidoc.Document;
+
+        try
+        {
+            // 1️⃣ Pick a Room
+            Reference pickedRef = uidoc.Selection.PickObject(ObjectType.Element, "Select a Room");
+            Room room = doc.GetElement(pickedRef) as Room;
+
+            if (room == null)
+            {
+                TaskDialog.Show("Error", "Selected element is not a Room.");
+                return Result.Failed;
+            }
+
+            // 2️⃣ Get Room Center (Location Point)
+            LocationPoint loc = room.Location as LocationPoint;
+            XYZ center = loc.Point;
+
+            // 3️⃣ Get Ceiling Height (Z)
+            Level level = doc.GetElement(room.LevelId) as Level;
+            double z = level.Elevation + room.UnboundedHeight;
+
+            // 4️⃣ Find Ceiling above room
+            Ceiling ceiling = new FilteredElementCollector(doc)
+                .OfCategory(BuiltInCategory.OST_Ceilings)
+                .WhereElementIsNotElementType()
+                .Cast<Ceiling>()
+                .FirstOrDefault(c =>
+                {
+                    BoundingBoxXYZ bb = c.get_BoundingBox(null);
+                    if (bb == null) return false;
+
+                    return (bb.Min.X <= center.X && center.X <= bb.Max.X &&
+                            bb.Min.Y <= center.Y && center.Y <= bb.Max.Y);
+                });
+
+            if (ceiling == null)
+            {
+                TaskDialog.Show("Error", "No ceiling found above the room.");
+                return Result.Failed;
+            }
+
+            // 5️⃣ Get Sprinkler Family Symbol
+            FamilySymbol sprinklerSymbol = new FilteredElementCollector(doc)
+                .OfCategory(BuiltInCategory.OST_Sprinklers)
+                .WhereElementIsElementType()
+                .Cast<FamilySymbol>()
+                .FirstOrDefault();
+
+            if (sprinklerSymbol == null)
+            {
+                TaskDialog.Show("Error", "No sprinkler family found.");
+                return Result.Failed;
+            }
+
+            // Activate symbol if needed
+            if (!sprinklerSymbol.IsActive)
+            {
+                using (Transaction t = new Transaction(doc, "Activate Symbol"))
+                {
+                    t.Start();
+                    sprinklerSymbol.Activate();
+                    t.Commit();
+                }
+            }
+
+            // 6️⃣ Create sprinkler at ceiling center
+            XYZ point = new XYZ(center.X, center.Y, z);
+
+            using (Transaction t = new Transaction(doc, "Place Sprinkler"))
+            {
+                t.Start();
+
+                FamilyInstance sprinkler = doc.Create.NewFamilyInstance(
+                    point,
+                    sprinklerSymbol,
+                    ceiling, // HOST TO CEILING
+                    Autodesk.Revit.DB.Structure.StructuralType.NonStructural
+                );
+
+                t.Commit();
+            }
+
+            TaskDialog.Show("Success", "Sprinkler placed successfully!");
+            return Result.Succeeded;
+        }
+        catch (Exception ex)
+        {
+            message = ex.Message;
+            return Result.Failed;
+        }
+    }
+}
