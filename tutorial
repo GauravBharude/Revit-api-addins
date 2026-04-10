@@ -2,3 +2,41 @@ Autodesk.Revvit.Attributes // we can use Transaction(TransacytionMode.Manual)
 Autodesk.Revit.Selection // imp so we can use ObjectType.Element
 
 //retreive elements
+ElementId floorID = pickedObjet.ElementId;
+Element floor = doc.GetElement(floorID);
+Parameter param = ele.get_Parameter("BuiltInParameter.CURVE_ELEM_LENGTH)"); // string p = praam.As Strin()
+string pram = ele.LookupParamter("Length").AsString();
+//
+var familyids = uidoc.Selection.GetElementIds().Select(x =>doc.GetElement(x));
+//
+elements = uidoc.PickElements(e=>e is Wall) // e=> e.Category.Id == new ElementId(BUildIdsCategoruy.Ost_Doors)
+references =uidoc.PickObjects(e=>e is Wall)
+//
+var ref = uidoc.PickObjects(ObjectType.Element, new ElementSelectionFilter());
+public class ElementSelectionFilter : IselectionFilter{
+    public bool AllowElement(Element e){
+        return e is Wall;
+    }
+    public bool AllowReferenc(Referenv referenc, XYZ pos){
+        return true;
+    }
+}
+//
+var ref = uidoc.PickObjects(ObjectType.Element, new ElementSelectionFilter(IsWall));
+public bool IsWall(Element e){
+    return  e is Wall;
+}
+
+// get elements
+ViewFamilyType view = new FilteredElemeentCollecotr(doc).OfClass(typeof(ViewFamilyType)).Cast<ViewFamilyType>();
+
+//filter
+//1
+var cate = new List<BuiltIn>(){Buil.Walss ,BuildOst Floor};
+var multicatfilter = new ElementMulticategoryFilter(Cate);
+var collector = new FilteredElemeentCollecotr(doc).WherePasses(multicatfilter)
+IList<Element> w = collector.ToElements();
+ICollection<ElementId> = collector.ToList();
+
+
+
